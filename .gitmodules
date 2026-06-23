@@ -1,10 +1,11 @@
 [submodule "libultraship"]
 	path = libultraship
-	url = https://github.com/kenix3/libultraship.git
-	branch = port-maintenance
+	url = https://github.com/htdguide/libultraship.git
+	branch = wasm-port
 [submodule "ZAPDTR"]
 	path = ZAPDTR
-	url = https://github.com/harbourmasters/ZAPDTR
+	url = https://github.com/htdguide/ZAPDTR.git
+	branch = wasm-port
 [submodule "OTRExporter"]
 	path = OTRExporter
 	url = https://github.com/harbourmasters/OTRExporter
