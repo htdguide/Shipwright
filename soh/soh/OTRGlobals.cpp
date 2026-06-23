@@ -860,11 +860,24 @@ void OTRGlobals::Initialize() {
                                               CVarGetInteger(CVAR_SETTING("AutoCaptureMouse"), 1));
     context->GetWindow()->SetForceCursorVisibility(CVarGetInteger(CVAR_SETTING("CursorVisibility"), 0));
 
+#ifdef __EMSCRIPTEN__
+    // On the web the SDL2 audio backend drives a ScriptProcessorNode whose
+    // callback runs on the main thread. ASYNCIFY frames can block the main
+    // thread longer than one callback's worth of samples, starving the node and
+    // producing glitches. A larger device buffer (SampleLength) means each
+    // callback renders more audio, giving a longer runway between callbacks so a
+    // single slow frame no longer underruns. The deeper reservoir
+    // (DesiredBuffered) keeps the producer ahead.
+    context->InitAudio({ .SampleRate = 32000,
+                         .SampleLength = 4096,   // ~128 ms per callback
+                         .DesiredBuffered = 8192 });
+#else
     context->InitAudio({ .SampleRate = 32000,
                          .SampleLength = 1024,
                          // 4096 frames at 32 kHz (~128 ms) gives enough reservoir for frame
                          // jitter and slow-frame spikes without perceptible audio latency.
                          .DesiredBuffered = 4096 });
+#endif
 
     // The menu is set up before audio is initialized, so its list of available audio backends has to be
     // populated here rather than in Menu::InitElement (where the window backends are handled).
