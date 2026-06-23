@@ -450,6 +450,9 @@ static void RunFrame() {
 
     osSyncPrintf("グラフィックスレッド実行開始\n"); // "Start graphic thread execution"
     Graph_Init(&runFrameContext.gfxCtx);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] RunFrame: Graph_Init done\n"); fflush(stderr);
+#endif
 
     while (runFrameContext.nextOvl) {
         runFrameContext.ovl = runFrameContext.nextOvl;
@@ -466,7 +469,13 @@ static void RunFrame() {
             snprintf(faultMsg, sizeof(faultMsg), "CLASS SIZE= %d bytes", size);
             Fault_AddHungupAndCrashImpl("GAME CLASS MALLOC FAILED", faultMsg);
         }
+#ifdef __EMSCRIPTEN__
+        fprintf(stderr, "[GFXDBG] RunFrame: before GameState_Init (size=%u)\n", (unsigned)size); fflush(stderr);
+#endif
         GameState_Init(gGameState, runFrameContext.ovl->init, &runFrameContext.gfxCtx);
+#ifdef __EMSCRIPTEN__
+        fprintf(stderr, "[GFXDBG] RunFrame: GameState_Init done\n"); fflush(stderr);
+#endif
 
         // Setup the normal skybox once before entering any game states to avoid the 0xabababab crash.
         // The crash is due to certain skyboxes not loading all the data they need from Skybox_Setup.
@@ -486,14 +495,24 @@ static void RunFrame() {
 
             PadMgr_ThreadEntry(&gPadMgr);
 
+#ifdef __EMSCRIPTEN__
+            static int _ff = 0; bool _f0 = (_ff < 2);
+            if (_f0) { fprintf(stderr, "[GFXDBG] frame%d: before Graph_Update\n", _ff); fflush(stderr); }
+#endif
             Graph_Update(&runFrameContext.gfxCtx, gGameState);
             // ticksB = GetPerfCounter();
+#ifdef __EMSCRIPTEN__
+            if (_f0) { fprintf(stderr, "[GFXDBG] frame%d: Graph_Update done, before ProcessGfx\n", _ff); fflush(stderr); }
+#endif
 
             if (GfxDebuggerIsDebuggingRequested()) {
                 GfxDebuggerDebugDisplayList(runFrameContext.gfxCtx.workBuffer);
             }
 
             Graph_ProcessGfxCommands(runFrameContext.gfxCtx.workBuffer);
+#ifdef __EMSCRIPTEN__
+            if (_f0) { fprintf(stderr, "[GFXDBG] frame%d: ProcessGfx done (RENDERED)\n", _ff); fflush(stderr); _ff++; }
+#endif
 
             // uint64_t diff = (ticksB - ticksA) / (freq / 1000);
             // printf("Frame simulated in %ims\n", diff);
@@ -516,6 +535,9 @@ static void RunFrame() {
 }
 
 void Graph_ThreadEntry(void* arg0) {
+    // Under emscripten this runs on the PROXY_TO_PTHREAD application worker,
+    // which may block freely; the canvas is transferred to this worker as an
+    // OffscreenCanvas so GL is local (not cross-thread).
     while (WindowIsRunning()) {
         RunFrame();
     }

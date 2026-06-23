@@ -620,10 +620,42 @@ endif()
 add_dependencies(${PROJECT_NAME}
     libultraship
 )
-if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
+if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS" AND NOT EMSCRIPTEN)
 add_dependencies(${PROJECT_NAME}
     ZAPDLib
 )
+endif()
+
+if(EMSCRIPTEN)
+    # Stubs for host-only asset-tooling symbols excluded from the web build.
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/emscripten_stubs.cpp)
+
+    # Emit a full HTML shell (emscripten generates .html + .js + .wasm + .data).
+    set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".html")
+
+    # Render on the browser MAIN thread (it owns the canvas, so WebGL presents
+    # to the visible canvas — OffscreenCanvas-on-a-worker never composited here).
+    # ASYNCIFY lets SoH's blocking init + render loop yield to the browser so the
+    # main thread isn't frozen (per-frame emscripten_sleep(0) after present).
+    target_link_options(${PROJECT_NAME} PRIVATE
+        -sASYNCIFY=1
+        -sASYNCIFY_STACK_SIZE=1048576
+        -sSTACK_SIZE=8MB
+        --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/emscripten_shell.html
+        -sEXIT_RUNTIME=0
+        -sASSERTIONS=0
+        # Emulate function-pointer casts globally (N64 decomp calls many fn
+        # pointers with mismatched signatures → heap corruption on wasm's strict
+        # call table). wasm-opt's fpcast-emu cap is raised via a wrapper.
+        -sEMULATE_FUNCTION_POINTER_CASTS=1
+        "-sEXPORTED_RUNTIME_METHODS=FS,PThread,callMain"
+        # Fixed (non-growing) shared heap — large enough for OOT/SoH.
+        -sINITIAL_MEMORY=1536MB
+        -sMAXIMUM_MEMORY=1536MB
+        # Bundle the host-generated asset archives into MEMFS at root.
+        "--preload-file=${CMAKE_SOURCE_DIR}/oot.o2r@/oot.o2r"
+        "--preload-file=${CMAKE_SOURCE_DIR}/soh.o2r@/soh.o2r"
+    )
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -691,6 +723,26 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
     )
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
+    )
+elseif(EMSCRIPTEN)
+    # Web build: all deps come from the wasm sysroot (CMAKE_PREFIX_PATH).
+    # No ZAPDLib (host tool), no dl libs. SDL2_net exports a -static target.
+    find_package(SDL2 REQUIRED)
+    find_package(Ogg REQUIRED)
+    find_package(Vorbis REQUIRED)
+    find_package(Opus REQUIRED)
+    find_package(OpusFile REQUIRED)
+    set(ADDITIONAL_LIBRARY_DEPENDENCIES
+        "libultraship;"
+        "ZAPDLib;"
+        SDL2::SDL2
+        "Ogg::ogg"
+        "Vorbis::vorbis"
+        "Vorbis::vorbisenc"
+        "Vorbis::vorbisfile"
+        "Opus::opus"
+        "Opusfile::Opusfile"
+        "SDL2_net::SDL2_net-static"
     )
 else()
     find_package(SDL2)

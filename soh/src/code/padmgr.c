@@ -1,6 +1,7 @@
 #include "global.h"
 #include "vt.h"
 #include <string.h>
+#include <stdio.h>
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/controls/Mouse.h"
@@ -468,11 +469,23 @@ void PadMgr_Init(PadMgr* padMgr, OSMesgQueue* siIntMsgQ, IrqMgr* irqMgr, OSId id
     PadMgr_UnlockSerialMesgQueue(padMgr, siIntMsgQ);
     osCreateMesgQueue(&padMgr->lockMsgQ, padMgr->lockMsgBuf, 1);
     PadMgr_UnlockPadData(padMgr);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] PadMgr: before PadSetup_Init\n"); fflush(stderr);
+#endif
     PadSetup_Init(siIntMsgQ, (u8*)&padMgr->validCtrlrsMask, padMgr->padStatus);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] PadMgr: after PadSetup_Init\n"); fflush(stderr);
+#endif
 
     padMgr->nControllers = 4;
     osContSetCh(padMgr->nControllers);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] PadMgr: after osContSetCh, before thread start\n"); fflush(stderr);
+#endif
 
     osCreateThread(&padMgr->thread, id, (void (*)(void*))PadMgr_ThreadEntry, padMgr, stack, priority);
     osStartThread(&padMgr->thread);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] PadMgr: thread started, Init done\n"); fflush(stderr);
+#endif
 }

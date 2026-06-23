@@ -344,6 +344,9 @@ OTRGlobals::OTRGlobals() {
     previousImGuiScaleIndex = -1;
     previousImGuiScale = defaultImGuiScale;
     ScaleImGui();
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] OTRGlobals ctor done\n"); fflush(stderr);
+#endif
 }
 
 typedef enum ExtractSteps {
@@ -418,6 +421,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     OTRVersion mqVersion = DetectOTRVersion("oot-mq.o2r", true);
 
     bool shouldRegen = VerifyArchiveVersion(vanillaVersion) || VerifyArchiveVersion(mqVersion);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] RunExtract: sohMatch=%d shouldRegen=%d vanillaVer=%d.%d.%d\n",
+            (int)sohArchiveVersionMatch, (int)shouldRegen, vanillaVersion.major, vanillaVersion.minor, vanillaVersion.patch); fflush(stderr);
+#endif
 
     std::filesystem::path ownPath;
     std::vector<std::string> args;
@@ -450,12 +457,22 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     OSFatal();
 #endif
 
+#ifdef __EMSCRIPTEN__
+    // Web build never extracts a ROM at runtime (the o2r archives are bundled
+    // into MEMFS at build time), so the host-only 'assets/' extractor folder is
+    // absent and irrelevant. Skip that popup, which would otherwise block the
+    // boot render loop forever waiting for a click.
+    if (false) {
+    } else
+#else
     if (!std::filesystem::exists(installPath + "/assets")) {
         SohGui::RegisterPopup("Extractor assets not found",
                               "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
                               "re-extract them from the download or.\n\nExiting...",
                               "OK", "", [&]() { exit(1); });
-    } else if (shouldRegen) {
+    } else
+#endif
+    if (shouldRegen) {
         SohGui::RegisterPopup("Outdated ROM Archives",
                               "Your oot.o2r or oot-mq.o2r were created with incompatible versions of SoH.\nYou will "
                               "now be redirected to re-extract them.");
@@ -719,6 +736,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         }
 
     render:
+#ifdef __EMSCRIPTEN__
+        { static int _rc = 0; if (_rc < 5) { fprintf(stderr, "[GFXDBG] RunExtract render#%d step=%d prompt=%d popups=%d task=%d\n",
+            _rc, (int)extractStep, (int)promptStep, (int)SohGui::PopupsQueued(), (int)extractionTask.has_value()); fflush(stderr); _rc++; } }
+#endif
         if (!WindowIsRunning()) {
             exit(0);
         }
@@ -1531,9 +1552,17 @@ bool VerifyArchiveVersion(OTRVersion version) {
 
 extern "C" void InitOTR(int argc, char* argv[]) {
     OTRGlobals::Instance = new OTRGlobals();
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] InitOTR: before RunExtract\n"); fflush(stderr);
+#endif
     OTRGlobals::Instance->RunExtract(argc, argv);
-
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] InitOTR: before Initialize\n"); fflush(stderr);
+#endif
     OTRGlobals::Instance->Initialize();
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] InitOTR: after Initialize\n"); fflush(stderr);
+#endif
     CustomMessageManager::Instance = new CustomMessageManager();
     ItemTableManager::Instance = new ItemTableManager();
     GameInteractor::Instance = new GameInteractor();
@@ -1604,8 +1633,14 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         Anchor::Instance->Enable();
     }
     ShipInit::InitAll();
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] InitOTR: after ShipInit::InitAll\n"); fflush(stderr);
+#endif
     Rando::StaticData::InitHashMaps();
     OTRGlobals::Instance->gRandoContext->AddExcludedOptions();
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] InitOTR: COMPLETE (returning to main)\n"); fflush(stderr);
+#endif
 }
 
 extern "C" void SaveManager_ThreadPoolWait() {
@@ -1784,8 +1819,15 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
         return;
     }
 
+#ifdef __EMSCRIPTEN__
+    static int _rcc = 0; bool _rc0 = (_rcc < 2);
+    if (_rc0) { fprintf(stderr, "[GFXDBG] RunCommands%d: before HandleEvents\n", _rcc); fflush(stderr); }
+#endif
     // Process window events for resize, mouse, keyboard events
     wnd->HandleEvents();
+#ifdef __EMSCRIPTEN__
+    if (_rc0) { fprintf(stderr, "[GFXDBG] RunCommands%d: HandleEvents done\n", _rcc); fflush(stderr); }
+#endif
 
     auto intp = wnd->GetInterpreterWeak().lock().get();
     intp->mInterpolationIndex = 0;
@@ -1794,10 +1836,19 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
         static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
     for (const auto& m : mtx_replacements) {
+#ifdef __EMSCRIPTEN__
+        if (_rc0) { fprintf(stderr, "[GFXDBG] RunCommands%d: before DrawAndRunGraphicsCommands\n", _rcc); fflush(stderr); }
+#endif
         wnd->DrawAndRunGraphicsCommands(Commands, m);
+#ifdef __EMSCRIPTEN__
+        if (_rc0) { fprintf(stderr, "[GFXDBG] RunCommands%d: DrawAndRunGraphicsCommands done (FRAME RENDERED)\n", _rcc); fflush(stderr); }
+#endif
         intp->mInterpolationIndex++;
     }
     ImGui::PopStyleColor();
+#ifdef __EMSCRIPTEN__
+    if (_rc0) { _rcc++; }
+#endif
 }
 
 // C->C++ Bridge

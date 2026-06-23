@@ -61,6 +61,9 @@ int main(int argc, char* argv[]) {
 #endif
     GameConsole_Init();
     InitOTR(argc, argv);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] main: InitOTR returned, entering Main()\n"); fflush(stderr);
+#endif
     // TODO: Was moved to below InitOTR because it requires window to be setup. But will be late to catch crashes.
     CrashHandlerRegisterCallback(CrashHandler_PrintSohData);
     BootCommands_Init();
@@ -95,6 +98,13 @@ void Main(void* arg) {
     // "System heap initalization"
     osSyncPrintf("システムヒープ初期化 %08x-%08x %08x\n", sysHeap, fb, gSystemHeapSize);
     SystemHeap_Init((void*)sysHeap, gSystemHeapSize); // initializes the system heap
+#ifdef __EMSCRIPTEN__
+    // The N64 debug heap was placed at a raw hardware address (SysCfb_GetFbEnd(),
+    // which is 0 in SoH because the N64 cfb init is stubbed out). On wasm that
+    // points into reserved low memory → OOB. Allocate a real heap instead.
+    debugHeapSize = 1024 * 64;
+    debugHeap = SYSTEM_ARENA_MALLOC_DEBUG(debugHeapSize);
+#else
     if (osMemSize >= 0x800000) {
         debugHeap = (void*)SysCfb_GetFbEnd();
         debugHeapSize = (0x80600000 - (uintptr_t)debugHeap);
@@ -104,9 +114,16 @@ void Main(void* arg) {
     }
 
     debugHeapSize = 1024 * 64;
+#endif
 
     osSyncPrintf("debug_InitArena(%08x, %08x)\n", debugHeap, debugHeapSize);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] Main: debugHeap=%p size=%u osMemSize=%x\n", debugHeap, (unsigned)debugHeapSize, (unsigned)osMemSize); fflush(stderr);
+#endif
     DebugArena_Init(debugHeap, debugHeapSize);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] Main: DebugArena_Init done\n"); fflush(stderr);
+#endif
     func_800636C0();
 
     R_ENABLE_ARENA_DBG = 0;
@@ -129,8 +146,14 @@ void Main(void* arg) {
     StackCheck_Init(&sAudioStackInfo, sAudioStack, sAudioStack + sizeof(sAudioStack), 0, 0x100, "audio");
     AudioMgr_Init(&gAudioMgr, sAudioStack + sizeof(sAudioStack), Z_PRIORITY_AUDIOMGR, 0xA, &gSchedContext, &gIrqMgr);
 
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] Main: AudioMgr_Init done, before PadMgr_Init\n"); fflush(stderr);
+#endif
     StackCheck_Init(&sPadMgrStackInfo, sPadMgrStack, sPadMgrStack + sizeof(sPadMgrStack), 0, 0x100, "padmgr");
     PadMgr_Init(&gPadMgr, &sSiIntMsgQ, &gIrqMgr, 7, Z_PRIORITY_PADMGR, &sIrqMgrStack);
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "[GFXDBG] Main: PadMgr_Init done\n"); fflush(stderr);
+#endif
 
     AudioMgr_Unlock(&gAudioMgr);
 

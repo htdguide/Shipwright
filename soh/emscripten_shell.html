@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8">
+<title>Ship of Harkinian (wasm)</title>
+<style>
+  html,body{margin:0;background:#000;overflow:hidden}
+  #canvas{display:block;width:100vw;height:100vh;background:#000}
+  #status{position:fixed;top:8px;left:8px;color:#7f7;font:13px monospace}
+</style>
+</head>
+<body>
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<div id="status">loading…</div>
+<script>
+  // Minimal shell: provide the canvas to the module and DO NOT touch its GL
+  // context on the main thread — its control is transferred to the worker.
+  var statusEl = document.getElementById('status');
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: function(t){ console.log(t); },
+    printErr: function(t){ console.error(t); },
+    setStatus: function(t){ if (t) statusEl.textContent = t; else statusEl.style.display='none'; },
+  };
+
+  // Browser autoplay policy: the Web Audio context SDL2 opens starts suspended
+  // until a user gesture. Resume it on the first click/keypress so sound plays.
+  function resumeAudio() {
+    try {
+      var ctx = Module.SDL2 && Module.SDL2.audioContext;
+      if (ctx && ctx.state !== 'running') { ctx.resume(); }
+    } catch (e) {}
+  }
+  window.addEventListener('pointerdown', resumeAudio, true);
+  window.addEventListener('keydown', resumeAudio, true);
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

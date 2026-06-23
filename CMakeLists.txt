@@ -187,13 +187,49 @@ set(INCLUDE_MPQ_SUPPORT ON)
 add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
 
 ################################################################################
+# Emscripten global build flags
+################################################################################
+if(EMSCRIPTEN)
+    # We supply our own SDL2 from the wasm sysroot; disable emscripten's
+    # poison "fakesdl" stub and put our SDL2 headers on the global include path.
+    add_compile_options(-sUSE_SDL=0)
+    add_link_options(-sUSE_SDL=0)
+    # pthreads-everywhere model: every TU and every linked archive must carry
+    # atomics/bulk-memory (-pthread) and be position-independent (-fPIC).
+    add_compile_options(-pthread -fPIC)
+    # NOTE: no ALLOW_MEMORY_GROWTH — growing shared memory under pthreads
+    # reallocates the SharedArrayBuffer and invalidates worker atomic refs
+    # (manifests as "unaligned" atomic traps in the proxy mailbox). Use a fixed,
+    # large heap instead (set via INITIAL_MEMORY in the soh target).
+    # Pre-spawn a generous worker pool. SoH creates resource/audio threads
+    # (ResourceManager ~ hardware_concurrency); if the pool is too small it would
+    # need to spawn a Worker while the main thread is blocked in init, which
+    # deadlocks (Worker creation needs a free main event loop).
+    add_link_options(-pthread -fPIC -sPTHREAD_POOL_SIZE=32)
+    # WebGL2 / full GLES3 entrypoints (glBlitFramebuffer, glReadBuffer, MSAA...).
+    add_link_options(-sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2)
+    # spdlog's bundled fmt uses consteval format-string checks that the
+    # emscripten/clang toolchain rejects here; neutralize FMT_CONSTEVAL so
+    # basic_format_string is not consteval-constructed.
+    add_compile_definitions(FMT_CONSTEVAL=)
+    foreach(_p IN LISTS CMAKE_PREFIX_PATH)
+        include_directories(${_p}/include ${_p}/include/SDL2)
+    endforeach()
+endif()
+
+################################################################################
 # Sub-projects
 ################################################################################
 add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship)
 target_compile_options(libultraship PRIVATE "${WARNING_OVERRIDE}")
 target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
-add_subdirectory(ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
-add_subdirectory(OTRExporter)
+# ZAPD and OTRExporter are host-only asset tools; they cannot build under
+# emscripten and are not needed at runtime (o2r archives are generated on the
+# host and bundled into the wasm filesystem).
+if(NOT EMSCRIPTEN)
+    add_subdirectory(ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
+    add_subdirectory(OTRExporter)
+endif()
 add_subdirectory(soh)
 
 set_property(TARGET soh PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
@@ -214,6 +250,8 @@ endif()
 
 find_package(Python3 COMPONENTS Interpreter)
 
+# Asset-generation targets require the host ZAPD tool; skip under emscripten.
+if(NOT EMSCRIPTEN)
 # Target to generate OTRs
 add_custom_target(
     ExtractAssets
@@ -255,6 +293,7 @@ add_custom_target(
     COMMENT "Generating soh.o2r..."
     DEPENDS ZAPD
 )
+endif() # NOT EMSCRIPTEN (asset-generation targets)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     find_package(ImageMagick COMPONENTS convert)
