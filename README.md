@@ -47,6 +47,10 @@ sdcard
 ```
 * Launch via Atmosphere's `Game+R` launcher method.
 
+#### Web (Browser)
+* There are no prebuilt web releases. You compile your own bundle from your own ROM — see [Web build (WebAssembly)](#web-build-webassembly) below.
+* Once built, serve the `build-emscripten/soh/` folder over HTTP (with the required headers) and open `soh.html` in a WebGL2 browser.
+
 ### 4. Play!
 
 Congratulations, you are now sailing with the Ship of Harkinian! Have fun!
@@ -78,6 +82,42 @@ In order for the game to function, you will require a **legally acquired** ROM f
 
 ### Graphics Backends
 Currently, there are three rendering APIs supported: DirectX11 (Windows), OpenGL (all platforms), and Metal (MacOS). You can change which API to use in the `Settings` menu of the menubar, which requires a restart.  If you're having an issue with crashing, you can change the API in the `shipofharkinian.json` file by finding the line `gfxbackend:""` and changing the value to `sdl` for OpenGL. DirectX 11 is the default on Windows.
+
+# Web build (WebAssembly)
+
+SoH can be retargeted to emscripten/WebAssembly and run in the browser: the game boots, renders OOT full-canvas via WebGL2, runs game logic, and plays sound through Web Audio.
+
+As with every other platform, **the Ship ships no copyrighted assets — you bring your own ROM.** The web bundle is built *from your own `.o2r` archives*; the copyrighted, ROM-derived data is baked into the WebAssembly bundle at compile time, so a build is personal to you and must not be redistributed.
+
+### 1. Generate your `.o2r` archives first
+Run any desktop release (Windows/macOS/Linux) once with your legally acquired ROM, exactly as in [Quick Start](#quick-start). This produces `oot.o2r` (and `soh.o2r`). Place both in the repository root next to `CMakeLists.txt` — the build bundles them into the in-browser filesystem.
+
+> Without `oot.o2r` and `soh.o2r` in the repo root, the web build will not link. This is intentional: no ROM, no build.
+
+### 2. Prerequisites
+* [emscripten SDK (emsdk)](https://emscripten.org/docs/getting_started/downloads.html), activated (`source ./emsdk_env.sh`).
+* A wasm sysroot containing SDL2, Ogg, Vorbis, Opus and OpusFile built for emscripten. Point CMake at it with `CMAKE_PREFIX_PATH`.
+* `cmake` and `ninja`.
+
+### 3. Configure and build
+```bash
+emcmake cmake -S . -B build-emscripten -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+  -DCMAKE_PREFIX_PATH="/path/to/wasm-sysroot"
+cmake --build build-emscripten --target soh
+```
+Output lands in `build-emscripten/soh/`: `soh.html`, `soh.js`, `soh.wasm` and `soh.data` (your bundled archives).
+
+### 4. Master Quest (optional)
+The web build also supports the Master Quest dungeons. **You bring your own MQ ROM, same convention as above:** generate an `oot-mq.o2r` from a supported Master Quest copy and drop it in the repository root *before configuring*. CMake detects it and bundles it into the browser filesystem (you'll see `Web build: bundling oot-mq.o2r (Master Quest) into MEMFS` at configure time); SoH auto-detects it at boot. If the file is absent the build is vanilla-only — no error.
+
+### 5. Serve and play
+The build uses pthreads, which require a `SharedArrayBuffer`. Browsers only expose that on a [cross-origin-isolated](https://web.dev/articles/coop-coep) page, so the server **must** send:
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+Serve `build-emscripten/soh/` over HTTP with those headers and open `soh.html` in a WebGL2-capable browser. Opening the file directly via `file://` will not work. The Web Audio context starts suspended until the first click/keypress (browser autoplay policy); sound resumes on that first gesture.
 
 # Custom Assets
 

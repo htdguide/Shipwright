@@ -656,6 +656,19 @@ if(EMSCRIPTEN)
         "--preload-file=${CMAKE_SOURCE_DIR}/oot.o2r@/oot.o2r"
         "--preload-file=${CMAKE_SOURCE_DIR}/soh.o2r@/soh.o2r"
     )
+
+    # Optional Master Quest support: if you bring your own MQ ROM and generate
+    # an oot-mq.o2r in the source root before configuring, it is bundled into
+    # MEMFS too. SoH auto-detects it at boot (DetectOTRVersion("oot-mq.o2r")),
+    # so no runtime change is needed. Absent file → vanilla-only web build.
+    if(EXISTS "${CMAKE_SOURCE_DIR}/oot-mq.o2r")
+        message(STATUS "Web build: bundling oot-mq.o2r (Master Quest) into MEMFS")
+        target_link_options(${PROJECT_NAME} PRIVATE
+            "--preload-file=${CMAKE_SOURCE_DIR}/oot-mq.o2r@/oot-mq.o2r"
+        )
+    else()
+        message(STATUS "Web build: no oot-mq.o2r found, Master Quest disabled")
+    endif()
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
